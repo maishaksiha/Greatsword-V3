@@ -4,12 +4,14 @@ Made by Nebelung
 MIT license: https://opensource.org/licenses/MIT
 */
 
-const express = require("express")
-const app = express()
-const fetch = require("node-fetch")
-const config = require("./config.json")
-const port = process.env.PORT || config.port
-const Corrosion = require("./lib/server")
+const express = require("express");
+const app = express();
+const fetch = require("node-fetch");
+const config = require("./config.json");
+
+const fs = require("fs");
+const codec = require("./lib/codec");
+
 
 const proxy = new Corrosion({
     prefix: config.prefix,
