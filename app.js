@@ -9,8 +9,11 @@ const app = express();
 const fetch = require("node-fetch");
 const config = require("./config.json");
 
+const Corrosion = require("corrosion");
+
 const fs = require("fs");
 const codec = require("./lib/codec");
+
 
 
 const proxy = new Corrosion({
