@@ -35,6 +35,16 @@ app.get("/", function(req, res){
     res.sendFile("index.html", {root: "./public"});
 });
 
+app.get("/api/logs", (req, res) => {
+    try {
+        const logs = JSON.parse(fs.readFileSync("logs.json", "utf-8"));
+        res.json(logs);
+    } catch (e) {
+        res.status(500).json({ error: "log read failed" });
+    }
+});
+
+
 app.get("/suggestions", function(req, res){
 async function getsuggestions() {
 var term = req.query.q || "";
