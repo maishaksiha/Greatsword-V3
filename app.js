@@ -47,12 +47,44 @@ getsuggestions()
 });
 
 app.use(function (req, res) {
+
     if (req.url.startsWith(proxy.prefix)) {
-      proxy.request(req,res);
+
+        try {
+            // /service/ の後ろにあるエンコードURLを取り出す
+            const encoded = req.url
+                .replace(proxy.prefix, "")
+                .split("/")[0];
+
+            // 元のURLに戻す（xor）
+            const decodedUrl = codec.xor.decode(encoded);
+
+            // 既存ログを読み込む
+            const logs = JSON.parse(fs.readFileSync("logs.json", "utf-8"));
+
+            // 新しい履歴を追加
+            logs.push({
+                time: new Date().toISOString(),
+                ip: req.ip,
+                url: decodedUrl,
+                ua: req.headers["user-agent"]
+            });
+
+            // 保存
+            fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
+
+        } catch (e) {
+            console.log("log error", e);
+        }
+
+        // もともとのプロキシ処理
+        proxy.request(req, res);
+
     } else {
-      res.status(404).sendFile("404.html", {root: "./public"});
+        res.status(404).sendFile("404.html", { root: "./public" });
     }
-})
+});
+
 
 app.listen(port, () => {
     console.log(`Greatsword V3 is running at localhost:${port}`)
