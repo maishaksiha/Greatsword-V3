@@ -15,7 +15,7 @@ const Corrosion = require("corrosion");
 const port = process.env.PORT || 8080;
 
 /* =========================
-   Corrosion (Greatsword)
+   Corrosion
 ========================= */
 
 const proxy = new Corrosion({
@@ -23,15 +23,14 @@ const proxy = new Corrosion({
   codec: config.codec,
   title: "Greatsword",
   forceHttps: true,
-  requestMiddleware: [
-    Corrosion.middleware.blacklist(
-      ["accounts.google.com"],
-      "Page is blocked"
-    ),
-  ],
 });
 
 proxy.bundleScripts();
+
+/* =========================
+   ★これが超重要（必須）
+========================= */
+app.use(proxy.middleware);
 
 /* =========================
    In-memory logs
@@ -57,10 +56,10 @@ setInterval(() => {
    Static files
 ========================= */
 
-app.use(express.static("./public", { extensions: ["html"] }));
+app.use(express.static("public", { extensions: ["html"] }));
 
 app.get("/", (req, res) => {
-  res.sendFile("index.html", { root: "./public" });
+  res.sendFile("index.html", { root: "public" });
 });
 
 /* =========================
@@ -72,51 +71,46 @@ app.get("/api/logs", (req, res) => {
 });
 
 /* =========================
-   Search suggestions
+   Suggestions
 ========================= */
 
 app.get("/suggestions", async (req, res) => {
   try {
-    const term = req.query.q || "";
-    const response = await fetch(
-      "https://duckduckgo.com/ac/?q=" + term + "&type=list"
+    const q = req.query.q || "";
+    const r = await fetch(
+      "https://duckduckgo.com/ac/?q=" + q + "&type=list"
     );
-    const result = await response.json();
-    res.send(result[1]);
+    const j = await r.json();
+    res.json(j[1]);
   } catch {
-    res.send([]);
+    res.json([]);
   }
 });
 
 /* =========================
-   Proxy（見た目・速度OK）
+   Proxy + logging
 ========================= */
 
 app.use((req, res, next) => {
-  if (req.url.startsWith(proxy.prefix)) {
-    try {
-      const encoded = req.url
-        .replace(proxy.prefix, "")
-        .split("/")[0];
+  if (!req.url.startsWith(proxy.prefix)) return next();
 
-      const decodedUrl = proxy.codec.decode(encoded);
+  try {
+    const encoded = req.url.replace(proxy.prefix, "").split("/")[0];
+    const decodedUrl = proxy.codec.decode(encoded);
 
-      if (!decodedUrl.match(/\.(css|js|png|jpg|jpeg|svg|gif|ico|webp)$/)) {
-        memoryLogs.push({
-          time: new Date().toISOString(),
-          ip: req.ip,
-          url: decodedUrl,
-          ua: req.headers["user-agent"],
-        });
+    if (!decodedUrl.match(/\.(css|js|png|jpg|jpeg|svg|gif|ico|webp)$/)) {
+      memoryLogs.push({
+        time: new Date().toISOString(),
+        ip: req.ip,
+        url: decodedUrl,
+        ua: req.headers["user-agent"],
+      });
 
-        if (memoryLogs.length > 1000) memoryLogs.shift();
-      }
-    } catch {}
+      if (memoryLogs.length > 1000) memoryLogs.shift();
+    }
+  } catch {}
 
-    proxy.request(req, res);
-  } else {
-    next(); // ← CSS・画像を殺さない
-  }
+  next();
 });
 
 /* =========================
@@ -124,13 +118,14 @@ app.use((req, res, next) => {
 ========================= */
 
 app.use((req, res) => {
-  res.status(404).sendFile("404.html", { root: "./public" });
+  res.status(404).sendFile("404.html", { root: "public" });
 });
 
 /* =========================
-   Start server
+   Start
 ========================= */
 
 app.listen(port, () => {
   console.log(`Greatsword running on port ${port}`);
 });
+
