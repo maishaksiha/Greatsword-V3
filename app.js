@@ -37,9 +37,11 @@ proxy.bundleScripts();
    Static files
 ========================= */
 
-app.use(express.static("./public", {
-  extensions: ["html"],
-}));
+app.use(
+  express.static("./public", {
+    extensions: ["html"],
+  })
+);
 
 app.get("/", (req, res) => {
   res.sendFile("index.html", { root: "./public" });
@@ -50,12 +52,14 @@ app.get("/", (req, res) => {
 ========================= */
 
 app.get("/api/logs", (req, res) => {
-  try {
-    const logs = JSON.parse(fs.readFileSync("logs.json", "utf-8"));
-    res.json(logs);
-  } catch (e) {
-    res.status(500).json({ error: "log read failed" });
-  }
+  fs.readFile("logs.json", "utf-8", (err, data) => {
+    if (err) return res.json([]);
+    try {
+      res.json(JSON.parse(data));
+    } catch {
+      res.json([]);
+    }
+  });
 });
 
 /* =========================
@@ -70,13 +74,13 @@ app.get("/suggestions", async (req, res) => {
     );
     const result = await response.json();
     res.send(result[1]);
-  } catch (e) {
+  } catch {
     res.send([]);
   }
 });
 
 /* =========================
-   Proxy + logging
+   Proxy + logging (軽量)
 ========================= */
 
 app.use((req, res) => {
@@ -88,16 +92,34 @@ app.use((req, res) => {
 
       const decodedUrl = proxy.codec.decode(encoded);
 
-      const logs = JSON.parse(fs.readFileSync("logs.json", "utf-8"));
+      // 静的ファイルはログらない
+      if (!decodedUrl.match(/\.(css|js|png|jpg|jpeg|svg|gif|webp|ico)$/)) {
+        fs.readFile("logs.json", "utf-8", (err, data) => {
+          let logs = [];
 
-      logs.push({
-        time: new Date().toISOString(),
-        ip: req.ip,
-        url: decodedUrl,
-        ua: req.headers["user-agent"],
-      });
+          if (!err && data) {
+            try {
+              logs = JSON.parse(data);
+            } catch {}
+          }
 
-      fs.writeFileSync("logs.json", JSON.stringify(logs, null, 2));
+          logs.push({
+            time: new Date().toISOString(),
+            ip: req.ip,
+            url: decodedUrl,
+            ua: req.headers["user-agent"],
+          });
+
+          // 最大1000件まで
+          if (logs.length > 1000) logs.shift();
+
+          fs.writeFile(
+            "logs.json",
+            JSON.stringify(logs, null, 2),
+            () => {}
+          );
+        });
+      }
     } catch (e) {
       console.log("log error:", e);
     }
@@ -113,6 +135,5 @@ app.use((req, res) => {
 ========================= */
 
 app.listen(port, () => {
-  console.log(`Greatsword is running on port ${port}`);
+  console.log(`Greatsword running on port ${port}`);
 });
-
