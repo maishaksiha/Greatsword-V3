@@ -12,7 +12,7 @@ const fs = require("fs");
 const config = require("./config.json");
 const Corrosion = require("corrosion");
 
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 /* =========================
    Corrosion (Greatsword)
@@ -34,14 +34,32 @@ const proxy = new Corrosion({
 proxy.bundleScripts();
 
 /* =========================
+   In-memory logs（超重要）
+========================= */
+
+let memoryLogs = [];
+
+// 起動時に既存ログを読む（1回だけ）
+try {
+  memoryLogs = JSON.parse(fs.readFileSync("logs.json", "utf-8"));
+} catch {
+  memoryLogs = [];
+}
+
+// 10秒ごとにまとめて保存（非同期）
+setInterval(() => {
+  fs.writeFile(
+    "logs.json",
+    JSON.stringify(memoryLogs.slice(-1000), null, 2),
+    () => {}
+  );
+}, 10000);
+
+/* =========================
    Static files
 ========================= */
 
-app.use(
-  express.static("./public", {
-    extensions: ["html"],
-  })
-);
+app.use(express.static("./public", { extensions: ["html"] }));
 
 app.get("/", (req, res) => {
   res.sendFile("index.html", { root: "./public" });
@@ -52,14 +70,7 @@ app.get("/", (req, res) => {
 ========================= */
 
 app.get("/api/logs", (req, res) => {
-  fs.readFile("logs.json", "utf-8", (err, data) => {
-    if (err) return res.json([]);
-    try {
-      res.json(JSON.parse(data));
-    } catch {
-      res.json([]);
-    }
-  });
+  res.json(memoryLogs);
 });
 
 /* =========================
@@ -80,7 +91,7 @@ app.get("/suggestions", async (req, res) => {
 });
 
 /* =========================
-   Proxy + logging (軽量)
+   Proxy（最軽量）
 ========================= */
 
 app.use((req, res) => {
@@ -92,38 +103,20 @@ app.use((req, res) => {
 
       const decodedUrl = proxy.codec.decode(encoded);
 
-      // 静的ファイルはログらない
-      if (!decodedUrl.match(/\.(css|js|png|jpg|jpeg|svg|gif|webp|ico)$/)) {
-        fs.readFile("logs.json", "utf-8", (err, data) => {
-          let logs = [];
-
-          if (!err && data) {
-            try {
-              logs = JSON.parse(data);
-            } catch {}
-          }
-
-          logs.push({
-            time: new Date().toISOString(),
-            ip: req.ip,
-            url: decodedUrl,
-            ua: req.headers["user-agent"],
-          });
-
-          // 最大1000件まで
-          if (logs.length > 1000) logs.shift();
-
-          fs.writeFile(
-            "logs.json",
-            JSON.stringify(logs, null, 2),
-            () => {}
-          );
+      // ページ遷移のみ記録
+      if (!decodedUrl.match(/\.(css|js|png|jpg|jpeg|svg|gif|ico|webp)$/)) {
+        memoryLogs.push({
+          time: new Date().toISOString(),
+          ip: req.ip,
+          url: decodedUrl,
+          ua: req.headers["user-agent"],
         });
-      }
-    } catch (e) {
-      console.log("log error:", e);
-    }
 
+        if (memoryLogs.length > 1000) {
+          memoryLogs.shift();
+        }
+      }
+    } catch {}
     proxy.request(req, res);
   } else {
     res.status(404).sendFile("404.html", { root: "./public" });
