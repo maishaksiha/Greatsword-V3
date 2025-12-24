@@ -34,19 +34,17 @@ const proxy = new Corrosion({
 proxy.bundleScripts();
 
 /* =========================
-   In-memory logs（超重要）
+   In-memory logs
 ========================= */
 
 let memoryLogs = [];
 
-// 起動時に既存ログを読む（1回だけ）
 try {
   memoryLogs = JSON.parse(fs.readFileSync("logs.json", "utf-8"));
 } catch {
   memoryLogs = [];
 }
 
-// 10秒ごとにまとめて保存（非同期）
 setInterval(() => {
   fs.writeFile(
     "logs.json",
@@ -91,10 +89,10 @@ app.get("/suggestions", async (req, res) => {
 });
 
 /* =========================
-   Proxy（最軽量）
+   Proxy（見た目・速度OK）
 ========================= */
 
-app.use((req, res) => {
+app.use((req, res, next) => {
   if (req.url.startsWith(proxy.prefix)) {
     try {
       const encoded = req.url
@@ -103,7 +101,6 @@ app.use((req, res) => {
 
       const decodedUrl = proxy.codec.decode(encoded);
 
-      // ページ遷移のみ記録
       if (!decodedUrl.match(/\.(css|js|png|jpg|jpeg|svg|gif|ico|webp)$/)) {
         memoryLogs.push({
           time: new Date().toISOString(),
@@ -112,15 +109,22 @@ app.use((req, res) => {
           ua: req.headers["user-agent"],
         });
 
-        if (memoryLogs.length > 1000) {
-          memoryLogs.shift();
-        }
+        if (memoryLogs.length > 1000) memoryLogs.shift();
       }
     } catch {}
+
     proxy.request(req, res);
   } else {
-    res.status(404).sendFile("404.html", { root: "./public" });
+    next(); // ← CSS・画像を殺さない
   }
+});
+
+/* =========================
+   404
+========================= */
+
+app.use((req, res) => {
+  res.status(404).sendFile("404.html", { root: "./public" });
 });
 
 /* =========================
